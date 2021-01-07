@@ -1,0 +1,19 @@
+{
+    "name": "ericchew87/commerce_wwex",
+    "type": "drupal-module",
+    "description": "WorldWide Express SpeedShip2 Module for Drupal Commerce.",
+    "homepage": "http://github.com/ericchew87/commerce_wwex",
+    "license": "GPL-2.0+",
+    "require": {
+        "drupal/commerce": "^2.16",
+        "drupal/commerce_shipping": "^2.0@beta",
+        "ericchew87/wwex-speedship2-php": "1.x-dev",
+        "ericchew87/wwex-speedfreight2-php": "1.x-dev"
+    },
+    "minimum-stability": "dev",
+    "extra": {
+        "branch-alias": {
+            "dev-master": "1.x-dev"
+        }
+    }
+}
