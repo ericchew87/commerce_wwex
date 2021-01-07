@@ -1,0 +1,7 @@
+services:
+  commerce_wwex.wwex_speedship2_request:
+    class: Drupal\commerce_wwex\WWEXSpeedShip2Request
+    arguments: []
+  commerce_wwex.wwex_speedfreight2_request:
+    class: Drupal\commerce_wwex\WWEXSpeedFreight2Request
+    arguments: [ ]

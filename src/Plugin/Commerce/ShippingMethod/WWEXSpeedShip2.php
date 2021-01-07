@@ -1,0 +1,241 @@
+<?php
+
+namespace Drupal\commerce_wwex\Plugin\Commerce\ShippingMethod;
+
+use Drupal\address\AddressInterface;
+use Drupal\commerce_price\Price;
+use Drupal\commerce_shipping\Entity\ShipmentInterface;
+use Drupal\commerce_shipping\PackageTypeManagerInterface;
+use Drupal\commerce_shipping\Plugin\Commerce\ShippingMethod\ShippingMethodBase;
+use Drupal\commerce_shipping\ShippingRate;
+use Drupal\commerce_wwex\WWEXSpeedShip2RequestInterface;
+use Drupal\physical\Measurement;
+use Drupal\state_machine\WorkflowManagerInterface;
+use ericchew87\WWEXSpeedShip2PHP\Structs\GetUPSServiceDetails;
+use ericchew87\WWEXSpeedShip2PHP\Structs\RateServiceOptions;
+use ericchew87\WWEXSpeedShip2PHP\Structs\ShipmentPackage;
+use ericchew87\WWEXSpeedShip2PHP\Structs\ShipmentPackages;
+use ericchew87\WWEXSpeedShip2PHP\Structs\SimpleShipmentAddress;
+use ericchew87\WWEXSpeedShip2PHP\Structs\UPSServiceDetailRequest;
+use Symfony\Component\DependencyInjection\ContainerInterface;
+
+/**
+ * Provides the WorldWide Express SpeedShip 2 shipping method.
+ *
+ * @CommerceShippingMethod(
+ *  id = "wwex_speedship2",
+ *  label = @Translation("WorldWide Express SpeedShip 2"),
+ *  services = {
+ *    "1DA" = @translation("UPS Next Day Air"),
+ *    "1DM" = @translation("UPS Next Day Air Early"),
+ *    "1DP" = @translation("UPS Next Day Air Saver"),
+ *    "2DA" = @translation("UPS Second Day Air"),
+ *    "2DM" = @translation("UPS Second Day Air AM"),
+ *    "GND" = @translation("UPS Ground"),
+ *    "3DS" = @translation("UPS Three-Day Select"),
+ *   }
+ * )
+ */
+class WWEXSpeedShip2 extends WWEXBase {
+
+  /**
+   * The WWEX SpeedShip2 Request service.
+   *
+   * @var \Drupal\commerce_wwex\WWEXSpeedShip2RequestInterface
+   */
+  protected $wwexSpeedShip2Request;
+
+  public function __construct(array $configuration, $plugin_id, $plugin_definition, PackageTypeManagerInterface $package_type_manager, WorkflowManagerInterface $workflow_manager, WWEXSpeedShip2RequestInterface $wwex_speedship2_request) {
+    parent::__construct($configuration, $plugin_id, $plugin_definition, $package_type_manager, $workflow_manager);
+
+    $this->wwexSpeedShip2Request = $wwex_speedship2_request;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition) {
+    return new static(
+      $configuration,
+      $plugin_id,
+      $plugin_definition,
+      $container->get('plugin.manager.commerce_package_type'),
+      $container->get('plugin.manager.workflow'),
+      $container->get('commerce_wwex.wwex_speedship2_request')
+    );
+  }
+
+  /**
+   * Calculates rates for the given shipment.
+   *
+   * @param \Drupal\commerce_shipping\Entity\ShipmentInterface $shipment
+   *   The shipment.
+   *
+   * @return \Drupal\commerce_shipping\ShippingRate[]
+   *   The rates.
+   */
+  public function calculateRates(ShipmentInterface $shipment) {
+    // Only attempt to collect rates if an address exists on the shipment.
+    if ($shipment->getShippingProfile()->get('address')->isEmpty()) {
+      return [];
+    }
+
+    if (empty($shipment->getPackageType())) {
+      $shipment->setPackageType($this->getDefaultPackageType());
+    }
+
+    $wwex_service = $this->wwexSpeedShip2Request->getService($this->configuration);
+    $request = $this->getUPSServiceDetailRequest($shipment);
+    $response = $wwex_service->getUPSServiceDetails($request);
+
+    $rates = [];
+    if ($response) {
+      $service_response = $response->getUpsServiceDetailResponse()->getServiceResponse();
+      if ($service_response->getResponseStatusCode() === "0") {
+        $service_details = $response->getUpsServiceDetailResponse()->getUpsServiceDetails()->getUpsServiceDetail();
+        foreach ($service_details as $service_detail) {
+          $service_fee_detail = $service_detail->getServiceFeeDetail();
+          $rates[] = new ShippingRate([
+            'shipping_method_id' => $this->parentEntity->id(),
+            'service' => $this->services[$service_detail->getServiceCode()],
+            'amount' => new Price($service_fee_detail->getServiceFeeGrandTotal(), 'USD'),
+          ]);
+        }
+      }
+    }
+
+    return $rates;
+  }
+
+  /**
+   * @param \Drupal\commerce_shipping\Entity\ShipmentInterface $shipment
+   *   The shipment.
+   *
+   * @return \ericchew87\WWEXSpeedShip2PHP\Structs\GetUPSServiceDetails
+   *   The request.
+   */
+  protected function getUPSServiceDetailRequest(ShipmentInterface $shipment) {
+    /** @var \Drupal\address\AddressInterface $recipient_address */
+    $recipient_address = $shipment->getShippingProfile()->get('address')->first();
+    $shipper_address = $shipment->getOrder()->getStore()->getAddress();
+
+    $request = new UPSServiceDetailRequest(
+      $this->getRateServiceOptions(),
+      $this->getWWEXShipmentAddress($shipper_address),
+      $this->getWWEXShipmentAddress($recipient_address),
+      $this->getWWEXShipmentPackages($shipment)
+    );
+
+    return new GetUPSServiceDetails($request);
+  }
+
+  /**
+   * Gets the ShipmentPackages.
+   *
+   * @param \Drupal\commerce_shipping\Entity\ShipmentInterface $shipment
+   *   The shipment.
+   *
+   * @return \ericchew87\WWEXSpeedShip2PHP\Structs\ShipmentPackages
+   *   An array of shipment packages.
+   */
+  protected function getWWEXShipmentPackages(ShipmentInterface $shipment) {
+    $packages = [];
+
+    foreach ($shipment->getItems() as $delta => $shipment_item) {
+      $item_weight = $shipment_item->getWeight();
+      if ($item_weight->getUnit() !== 'lb') {
+        $item_weight = $item_weight->convert('lb');
+      }
+
+      $package_type = $shipment->getPackageType();
+
+      $length = $this->ensureUnitOfMeasure($package_type->getLength(), 'in');
+      $width = $this->ensureUnitOfMeasure($package_type->getWidth(), 'in');
+      $height = $this->ensureUnitOfMeasure($package_type->getHeight(), 'in');
+
+      $package = new ShipmentPackage(
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        $height->getNumber(),
+        NULL,
+        NULL,
+        $length->getNumber(),
+        (string) ($delta + 1),
+        '00',
+        $item_weight->getNumber(),
+        $width->getNumber()
+      );
+
+      $packages[] = $package;
+    }
+
+    return new ShipmentPackages($packages);
+  }
+
+  /**
+   * Ensures a measurement object unit of measure matches
+   * the passed in unit of measure.
+   *
+   * @param \Drupal\physical\Measurement $measurement
+   *   The measurement object.
+   * @param string $unit
+   *   The unit of measure.
+   *
+   * @return \Drupal\physical\Measurement
+   *   The measurement object.
+   */
+  protected function ensureUnitOfMeasure(Measurement $measurement, $unit) {
+    if ($measurement->getUnit() !== $unit) {
+      $measurement = $measurement->convert($unit);
+    }
+
+    return $measurement;
+  }
+
+  /**
+   * Converts an address into a WWEX SimpleShipmentAddress.
+   *
+   * @param \Drupal\address\AddressInterface $address
+   *   The address.
+   *
+   * @return \ericchew87\WWEXSpeedShip2PHP\Structs\SimpleShipmentAddress
+   *   The wwex shipment address.
+   */
+  protected function getWWEXShipmentAddress(AddressInterface $address) {
+    return new SimpleShipmentAddress(
+      $address->getLocality(),
+      $address->getCountryCode(),
+      $address->getPostalCode(),
+      'N',
+      $address->getAdministrativeArea()
+    );
+  }
+
+  /**
+   * Gets the rate service options.
+   *
+   * @return \ericchew87\WWEXSpeedShip2PHP\Structs\RateServiceOptions
+   *   The rate service options.
+   */
+  protected function getRateServiceOptions() {
+    $options = new RateServiceOptions(
+      NULL,
+      'N',
+      'N',
+      'N',
+      'N',
+      'N',
+      'N',
+      'N',
+      'S'
+    );
+
+    return $options;
+  }
+
+}

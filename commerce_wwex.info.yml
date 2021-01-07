@@ -1,0 +1,7 @@
+name: Commerce WWEX
+type: module
+description: 'Provides WorldWide Express integration with Commerce Shipping.'
+package: Commerce (shipping)
+core: 8.x
+dependencies:
+  - commerce_shipping
