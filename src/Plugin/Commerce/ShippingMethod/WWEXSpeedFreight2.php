@@ -2,11 +2,13 @@
 
 namespace Drupal\commerce_wwex\Plugin\Commerce\ShippingMethod;
 
+use Drupal\commerce_packaging\ShipmentPackagerManager;
 use Drupal\commerce_price\Price;
 use Drupal\commerce_shipping\Entity\ShipmentInterface;
 use Drupal\commerce_shipping\PackageTypeManagerInterface;
 use Drupal\commerce_shipping\ShippingRate;
 use Drupal\commerce_wwex\WWEXSpeedFreight2RequestInterface;
+use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\state_machine\WorkflowManagerInterface;
 use ericchew87\WWEXSpeedFreight2PHP\Arrays\ArrayOfWSHandlingUnit;
 use ericchew87\WWEXSpeedFreight2PHP\Arrays\ArrayOfWSLineItem;
@@ -45,14 +47,34 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 class WWEXSpeedFreight2 extends WWEXBase {
 
   /**
-   * The WWEX SpeedShip2 Request service.
+   * The WWEX SpeedFreight2 Request service.
    *
    * @var \Drupal\commerce_wwex\WWEXSpeedFreight2RequestInterface
    */
   protected $wwexSpeedFreight2Request;
 
-  public function __construct(array $configuration, $plugin_id, $plugin_definition, PackageTypeManagerInterface $package_type_manager, WorkflowManagerInterface $workflow_manager, WWEXSpeedFreight2RequestInterface $wwex_speedfreight2_request) {
-    parent::__construct($configuration, $plugin_id, $plugin_definition, $package_type_manager, $workflow_manager);
+  /**
+   * Constructs a new WWEXSpeedFreight2 object.
+   *
+   * @param array $configuration
+   *   A configuration array containing information about the plugin instance.
+   * @param string $plugin_id
+   *   The plugin_id for the plugin instance.
+   * @param mixed $plugin_definition
+   *   The plugin implementation definition.
+   * @param \Drupal\commerce_shipping\PackageTypeManagerInterface $package_type_manager
+   *   The package type manager.
+   * @param \Drupal\state_machine\WorkflowManagerInterface $workflow_manager
+   *   The workflow manager.
+   * @param \Drupal\Core\Entity\EntityTypeManagerInterface $entity_type_manager
+   *   The entity type manager.
+   * @param \Drupal\commerce_packaging\ShipmentPackagerManager $shipment_packager
+   *   The shipment packager.
+   * @param \Drupal\commerce_wwex\WWEXSpeedFreight2RequestInterface $wwex_speedfreight2_request
+   *   The WWEX SpeedFreight2 Request service.
+   */
+  public function __construct(array $configuration, $plugin_id, $plugin_definition, PackageTypeManagerInterface $package_type_manager, WorkflowManagerInterface $workflow_manager, EntityTypeManagerInterface $entity_type_manager, ShipmentPackagerManager $shipment_packager, WWEXSpeedFreight2RequestInterface $wwex_speedfreight2_request) {
+    parent::__construct($configuration, $plugin_id, $plugin_definition, $package_type_manager, $workflow_manager, $entity_type_manager, $shipment_packager);
 
     $this->wwexSpeedFreight2Request = $wwex_speedfreight2_request;
   }
@@ -67,6 +89,8 @@ class WWEXSpeedFreight2 extends WWEXBase {
       $plugin_definition,
       $container->get('plugin.manager.commerce_package_type'),
       $container->get('plugin.manager.workflow'),
+      $container->get('entity_type.manager'),
+      $container->get('plugin.commerce_shipment_packager'),
       $container->get('commerce_wwex.wwex_speedfreight2_request')
     );
   }
