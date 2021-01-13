@@ -7,6 +7,7 @@
     "require": {
         "drupal/commerce": "^2.16",
         "drupal/commerce_shipping": "^2.0@beta",
+        "ericchew87/commerce_packaging": "1.x-dev",
         "ericchew87/wwex-speedship2-php": "1.x-dev",
         "ericchew87/wwex-speedfreight2-php": "1.x-dev"
     },
