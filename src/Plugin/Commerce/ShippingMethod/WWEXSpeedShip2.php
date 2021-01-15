@@ -150,11 +150,6 @@ class WWEXSpeedShip2 extends WWEXBase {
     return $rates;
   }
 
-  public function selectRate(ShipmentInterface $shipment, ShippingRate $rate) {
-    parent::selectRate($shipment, $rate);
-    $this->shipmentPackager->packageShipment($shipment, $this);
-  }
-
   /**
    * @param \Drupal\commerce_shipping\Entity\ShipmentInterface $shipment
    *   The shipment.
