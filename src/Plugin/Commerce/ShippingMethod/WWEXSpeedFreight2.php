@@ -2,7 +2,7 @@
 
 namespace Drupal\commerce_wwex\Plugin\Commerce\ShippingMethod;
 
-use Drupal\commerce_packaging\ShipmentPackagerManager;
+use Drupal\commerce_packaging\ChainShipmentPackagerInterface;
 use Drupal\commerce_price\Price;
 use Drupal\commerce_shipping\Entity\ShipmentInterface;
 use Drupal\commerce_shipping\PackageTypeManagerInterface;
@@ -68,12 +68,12 @@ class WWEXSpeedFreight2 extends WWEXBase {
    *   The workflow manager.
    * @param \Drupal\Core\Entity\EntityTypeManagerInterface $entity_type_manager
    *   The entity type manager.
-   * @param \Drupal\commerce_packaging\ShipmentPackagerManager $shipment_packager
+   * @param \Drupal\commerce_packaging\ChainShipmentPackagerInterface $shipment_packager
    *   The shipment packager.
    * @param \Drupal\commerce_wwex\WWEXSpeedFreight2RequestInterface $wwex_speedfreight2_request
    *   The WWEX SpeedFreight2 Request service.
    */
-  public function __construct(array $configuration, $plugin_id, $plugin_definition, PackageTypeManagerInterface $package_type_manager, WorkflowManagerInterface $workflow_manager, EntityTypeManagerInterface $entity_type_manager, ShipmentPackagerManager $shipment_packager, WWEXSpeedFreight2RequestInterface $wwex_speedfreight2_request) {
+  public function __construct(array $configuration, $plugin_id, $plugin_definition, PackageTypeManagerInterface $package_type_manager, WorkflowManagerInterface $workflow_manager, EntityTypeManagerInterface $entity_type_manager, ChainShipmentPackagerInterface $shipment_packager, WWEXSpeedFreight2RequestInterface $wwex_speedfreight2_request) {
     parent::__construct($configuration, $plugin_id, $plugin_definition, $package_type_manager, $workflow_manager, $entity_type_manager, $shipment_packager);
 
     $this->wwexSpeedFreight2Request = $wwex_speedfreight2_request;
@@ -90,7 +90,7 @@ class WWEXSpeedFreight2 extends WWEXBase {
       $container->get('plugin.manager.commerce_package_type'),
       $container->get('plugin.manager.workflow'),
       $container->get('entity_type.manager'),
-      $container->get('plugin.commerce_shipment_packager'),
+      $container->get('commerce_packaging.chain_shipment_packager'),
       $container->get('commerce_wwex.wwex_speedfreight2_request')
     );
   }

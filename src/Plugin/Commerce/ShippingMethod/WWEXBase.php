@@ -4,7 +4,7 @@
 namespace Drupal\commerce_wwex\Plugin\Commerce\ShippingMethod;
 
 
-use Drupal\commerce_packaging\ShipmentPackagerManager;
+use Drupal\commerce_packaging\ChainShipmentPackagerInterface;
 use Drupal\commerce_packaging\ShippingMethodPackagingTrait;
 use Drupal\commerce_shipping\PackageTypeManagerInterface;
 use Drupal\commerce_shipping\Plugin\Commerce\ShippingMethod\ShippingMethodBase;
@@ -15,14 +15,19 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 
 abstract class WWEXBase extends ShippingMethodBase {
 
-  use ShippingMethodPackagingTrait;
-
   /**
    * The entity type manager.
    *
    * @var \Drupal\Core\Entity\EntityTypeManagerInterface
    */
   protected $entityTypeManager;
+
+  /**
+   * The shipment packager.
+   *
+   * @var \Drupal\commerce_packaging\ChainShipmentPackagerInterface
+   */
+  protected $shipmentPackager;
 
   /**
    * Constructs a new WWEXBase object.
@@ -39,10 +44,10 @@ abstract class WWEXBase extends ShippingMethodBase {
    *   The workflow manager.
    * @param \Drupal\Core\Entity\EntityTypeManagerInterface $entity_type_manager
    *   The entity type manager.
-   * @param \Drupal\commerce_packaging\ShipmentPackagerManager $shipment_packager
+   * @param \Drupal\commerce_packaging\ChainShipmentPackagerInterface $shipment_packager
    *   The shipment packager.
    */
-  public function __construct(array $configuration, $plugin_id, $plugin_definition, PackageTypeManagerInterface $package_type_manager, WorkflowManagerInterface $workflow_manager, EntityTypeManagerInterface $entity_type_manager, ShipmentPackagerManager $shipment_packager) {
+  public function __construct(array $configuration, $plugin_id, $plugin_definition, PackageTypeManagerInterface $package_type_manager, WorkflowManagerInterface $workflow_manager, EntityTypeManagerInterface $entity_type_manager, ChainShipmentPackagerInterface $shipment_packager) {
     parent::__construct($configuration, $plugin_id, $plugin_definition, $package_type_manager, $workflow_manager);
 
     $this->entityTypeManager = $entity_type_manager;
@@ -60,10 +65,9 @@ abstract class WWEXBase extends ShippingMethodBase {
       $container->get('plugin.manager.commerce_package_type'),
       $container->get('plugin.manager.workflow'),
       $container->get('entity_type.manager'),
-      $container->get('plugin.manager.commerce_shipment_packager')
+      $container->get('commerce_packaging.chain_shipment_packager')
     );
   }
-
 
   /**
    * {@inheritdoc}
@@ -143,8 +147,6 @@ abstract class WWEXBase extends ShippingMethodBase {
       '#default_value' => $this->configuration['api_information']['mode'],
     ];
 
-    $form = $this->buildPackagingConfigurationForm($form, $form_state, $this);
-
     return $form;
   }
 
@@ -152,7 +154,6 @@ abstract class WWEXBase extends ShippingMethodBase {
    * {@inheritdoc}
    */
   public function submitConfigurationForm(array &$form, FormStateInterface $form_state) {
-    $this->submitPackagingConfigurationForm($form, $form_state, $this);
     if (!$form_state->getErrors()) {
       $values = $form_state->getValue($form['#parents']);
 
